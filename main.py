@@ -7,9 +7,13 @@ from PIL import Image, ImageTk
 nii_file_path = ""
 data = None
 data_segmentated = None
+seed = None
+canvas_image_id = None
+img_width = None
+img_height = None
 
 def plot_nii_slice(slice_num):
-    global data, data_segmentated
+    global data, data_segmentated, canvas_image_id, img_width, img_height
 
     if data_segmentated is None:
         slice_data = data[:, :, int(slice_num)]
@@ -20,7 +24,9 @@ def plot_nii_slice(slice_num):
 
     canvas.delete("all")
     canvas.image = ImageTk.PhotoImage(img_tk)
-    canvas.create_image(canvas.winfo_width() / 2, canvas.winfo_height() / 2, anchor="center", image=canvas.image)
+    canvas_image_id  = canvas.create_image(canvas.winfo_width() / 2, canvas.winfo_height() / 2, anchor="center", image=canvas.image)
+    img_width = img_tk.width
+    img_height = img_tk.height
 
 def slider_changed(event):
     plot_nii_slice(slice_slider.get())
@@ -81,11 +87,66 @@ def calculate_and_show_isodata(initial_threshold):
     isodata_text = ttk.Label(head_frame, text="Isodata Threshold: {}".format(threshold))
     isodata_text.pack(side="left", padx=10)
 
+def mark_seed(event):
+    global seed
+    # Obtener las coordenadas del clic en el canvas
+    x_canvas = event.x
+    y_canvas = event.y
+
+    # Obtener las coordenadas del borde superior izquierdo de la imagen en el canvas
+    img_coords = canvas.coords(canvas_image_id)
+    img_x0, img_y0 = img_coords[0], img_coords[1]
+
+    # Calcular las coordenadas relativas dentro de la imagen
+    x_image = int((x_canvas - img_x0 + img_width / 2) * (data.shape[0] / img_width))
+    y_image = int((y_canvas - img_y0 + img_height / 2) * (data.shape[1] / img_height))
+
+    # Usar el número de la slice actual como la tercera coordenada de la semilla
+    slice_num = slice_slider.get()
+
+    seed = (x_image, y_image, slice_num)
+    print("Seed marked at:", seed)
+
+
+
+
+
+def run_region_growing():
+    global data, data_segmentated, seed
+
+    if data is not None and seed is not None:
+        threshold = int(threshold_entry.get())
+        data_segmentated = region_growing(data, seed, threshold)
+        plot_nii_slice(slice_slider.get())
+
+def region_growing(data, seed, threshold):
+    segmented = np.zeros_like(data)
+    stack = [seed]
+
+    while stack:
+        x, y, z = stack.pop()
+        if segmented[x, y, z] == 0 and data[x, y, z] <= threshold:
+            segmented[x, y, z] = 255
+            if x > 0:
+                stack.append((x - 1, y, z))
+            if x < data.shape[0] - 1:
+                stack.append((x + 1, y, z))
+            if y > 0:
+                stack.append((x, y - 1, z))
+            if y < data.shape[1] - 1:
+                stack.append((x, y + 1, z))
+            if z > 0:
+                stack.append((x, y, z - 1))
+            if z < data.shape[2] - 1:
+                stack.append((x, y, z + 1))
+
+    return segmented
+
+
 def clear_head():
     for widget in head_frame.winfo_children():
         widget.destroy()
 
-# Función para cargar un archivo .nii
 def load_nii_file():
     global nii_file_path, data
     nii_file_path = filedialog.askopenfilename(filetypes=[("NIfTI files", "*.nii")])
@@ -115,11 +176,17 @@ head_frame.pack(side="top", fill="x")
 canvas = tk.Canvas(root, width=400, height=400)
 canvas.pack()
 
+canvas.bind("<Button-1>", mark_seed)  # Bind the left mouse button click event to mark_seed function
+
 slice_slider = ttk.Scale(root, from_=0, to=0, orient="horizontal", command=slider_changed)
 slice_slider.pack()
 
 isodata_anchor = ttk.Label(navbar_frame, text="Isodata", cursor="hand2")
 isodata_anchor.pack(side="top", pady=10)
 isodata_anchor.bind("<Button-1>", lambda event: isodata_clicked())
+
+region_growing_anchor = ttk.Label(navbar_frame, text="Region Growing", cursor="hand2")
+region_growing_anchor.pack(side="top", pady=10)
+region_growing_anchor.bind("<Button-1>", lambda event: run_region_growing())
 
 root.mainloop()
