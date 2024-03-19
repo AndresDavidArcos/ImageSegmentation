@@ -119,39 +119,28 @@ def region_growing_clicked():
 
 
 def start_seed_selection():
-    # Cambiar el cursor a una forma de cruz
     root.config(cursor="crosshair")
-    # Enlazar la función mark_seed al evento de clic en el canvas
     canvas.bind("<Button-1>", mark_seed)
 
 
 def mark_seed(event):
     global seed, data
 
-    # Obtener las coordenadas del clic en el canvas
     x_canvas = event.x
     y_canvas = event.y
 
-    # Obtener las coordenadas del borde superior izquierdo de la imagen en el canvas
     img_coords = canvas.coords(canvas_image_id)
     img_x0, img_y0 = img_coords[0], img_coords[1]
 
-    # Calcular las coordenadas relativas dentro de la imagen
     x_image = int((x_canvas - img_x0 + img_width / 2) * (data.shape[2] / img_width))
     y_image = int((y_canvas - img_y0 + img_height / 2) * (data.shape[1] / img_height))
 
-    # Usar el número de la slice actual como la tercera coordenada de la semilla
     slice_num = int(slice_slider.get())
 
     seed = (slice_num, y_image, x_image)
     print("Seed marked at:", seed, "matrix # rows, cols: ", data.shape[1], data.shape[2])
 
-    # punto blanco para debugear
-    # paint_seed_area(data, seed)
-
-    # Restaurar el cursor a su forma normal
     root.config(cursor="")
-    # Desenlazar la función mark_seed del evento de clic en el canvas
     canvas.unbind("<Button-1>")
     run_region_growing()
 
@@ -180,57 +169,44 @@ def run_region_growing():
 def region_growing(data, seed, intensity_tolerance):
     segmented = np.zeros_like(data)
     stack = [seed]
-    region_mean = data[seed]  # Inicializar la intensidad media con el valor de la semilla
-    region_size = 1  # Inicializar el tamaño de la región con 1 (semilla)
+    region_mean = data[seed]
+    region_size = 1
 
     while stack:
         z, y, x = stack.pop()
 
-        # Verificar si el píxel ya está segmentado
         if segmented[z, y, x] == 0:
-            # Verificar si la diferencia de intensidad del píxel con respecto a la intensidad media de la región es menor o igual a la tolerancia
             if abs(data[z, y, x] - region_mean) <= intensity_tolerance:
-                # Agregar el píxel a la región segmentada
                 segmented[z, y, x] = 255
 
-                # Incrementar el tamaño de la región
                 region_size += 1
-                # Actualizar la intensidad media de la región
                 region_mean = (region_mean * (region_size - 1) + data[z, y, x]) / region_size
 
-                # Agregar los vecinos del píxel actual a la pila
                 for i in range(-1, 2):
                     for j in range(-1, 2):
                         for k in range(-1, 2):
-                            # Evitar los vecinos fuera de los límites del volumen de datos
                             if 0 <= z + i < data.shape[0] and 0 <= y + j < data.shape[1] and 0 <= x + k < data.shape[2]:
                                 stack.append((z + i, y + j, x + k))
 
     return segmented
 
 def initialize_centers(data, k):
-    # Inicializamos los centroides de forma aleatoria eligiendo k puntos aleatorios de los datos
     centers_indices = np.random.choice(data.shape[0], size=k, replace=False)
     centers = data[centers_indices]
     return centers
 
 def assign_clusters(data, centers):
-    # Calculamos la distancia euclidiana entre cada punto de datos y los centroides
 
     distances = np.abs(data - centers[:, np.newaxis])
-    # Asignamos cada punto al centroide más cercano
     clusters = np.argmin(distances, axis=0)
     return clusters
 
 def update_centers(data, clusters, k):
     centers = []
     for i in range(k):
-        # Verificamos si hay algún punto asignado al cluster
         if np.sum(clusters == i) > 0:
-            # Calculamos el nuevo centroide como el promedio de los puntos asignados al cluster
             centers.append(np.mean(data[clusters == i]))
         else:
-            # Si el cluster está vacío, elegimos un nuevo centroide aleatorio
             centers.append(np.random.choice(data))
     return np.array(centers)
 
@@ -240,7 +216,6 @@ def k_means(data, k, max_iterations=100, tol=1e-4):
         old_centers = centers.copy()
         clusters = assign_clusters(data, centers)
         centers = update_centers(data, clusters, k)
-        # Comprobamos la convergencia
         if np.linalg.norm(centers - old_centers) < tol:
             break
     return clusters, centers
@@ -249,20 +224,17 @@ def run_k_means():
     global data, data_segmentated
     k_value = int(k_entry.get())
 
-    # Ejecutar el algoritmo K-Means
     clusters, centers = k_means(data.flatten(), k_value)
     print("centers: ",centers)
     print("clusters: ",clusters)
 
-# Asignar a cada píxel el valor del centroide más cercano
     segmented_data = centers[clusters]
 
-    # Redimensionar nuevamente los datos segmentados a la forma original de la imagen
     data_segmentated = segmented_data.reshape(data.shape)
     plot_nii_slice(int(slice_slider.get()))
 
 def k_means_clicked(event):
-    clear_head()  # Limpiar el header
+    clear_head()
     k_frame = ttk.Frame(head_frame)
     k_frame.pack(fill="x", padx=10, pady=5)
 
@@ -277,7 +249,7 @@ def k_means_clicked(event):
     run_button.pack(side="left")
 
 def anotar_clicked():
-    global draw_color_button  # Hacer referencia a la variable global
+    global draw_color_button
 
     clear_head()
 
@@ -295,7 +267,6 @@ def anotar_clicked():
     export_button = ttk.Button(head_frame, text="Exportar", command=export_image_with_annotations)
     export_button.pack(side="left", padx=10)
 
-    # Configurar el evento de clic en el canvas para dibujar
     canvas.bind("<B1-Motion>", draw_on_canvas)
 
 
@@ -306,39 +277,28 @@ def draw_on_canvas(event):
     x = event.x
     y = event.y
 
-    # Dibujar un círculo en el canvas en la posición del evento
     oval_id = canvas.create_oval(x - 2, y - 2, x + 2, y + 2, fill=draw_color_button.cget("bg"), outline="")
-    # Asignar una etiqueta única al óvalo
     canvas.itemconfig(oval_id, tags=("oval",))
 
 def export_image_with_annotations():
-    # Crear una imagen vacía para dibujar los trazos
     annotated_img = Image.new("RGB", (img_width, img_height), color="white")
     annotated_draw = ImageDraw.Draw(annotated_img)
 
-    # Obtener el tamaño del canvas
     canvas_width = canvas.winfo_width()
     canvas_height = canvas.winfo_height()
 
-    # Calcular el desplazamiento necesario para ajustar las coordenadas del canvas a las de la imagen exportada
     x_offset = (img_width - canvas_width) // 2
     y_offset = (img_height - canvas_height) // 2
 
-    # Obtener todos los óvalos dibujados en el canvas
     for oval_id in canvas.find_withtag("oval"):
-        # Obtener las coordenadas del óvalo
         x0, y0, x1, y1 = canvas.coords(oval_id)
-        # Aplicar el desplazamiento a las coordenadas
         x0 += x_offset
         y0 += y_offset
         x1 += x_offset
         y1 += y_offset
-        # Obtener el color del óvalo
         color = canvas.itemcget(oval_id, "fill")
-        # Dibujar el óvalo en la imagen con el color correspondiente
         annotated_draw.ellipse([x0, y0, x1, y1], fill=color)
 
-    # Guardar la imagen en formato PNG
     filename = f"annotated_image_{str(uuid.uuid4())}.png"
     annotated_img.save(filename)
 
@@ -422,7 +382,6 @@ anotar_anchor = ttk.Label(navbar_frame, text="Anotar", cursor="hand2")
 anotar_anchor.pack(side="top", pady=10)
 anotar_anchor.bind("<Button-1>", lambda event: anotar_clicked())
 
-# Agregar la anchor para exportar la segmentación
 export_segmentation_button = ttk.Button(navbar_frame, text="Exportar Segmentación", command=export_segmentation)
 export_segmentation_button.pack(side="top", pady=10)
 
