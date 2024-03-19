@@ -1,6 +1,5 @@
 import uuid
 from tkinter.colorchooser import askcolor
-
 import nibabel as nib
 import numpy as np
 import tkinter as tk
