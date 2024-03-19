@@ -1,8 +1,11 @@
+import uuid
+from tkinter.colorchooser import askcolor
+
 import nibabel as nib
 import numpy as np
 import tkinter as tk
-from tkinter import ttk, filedialog
-from PIL import Image, ImageTk
+from tkinter import ttk, filedialog, messagebox
+from PIL import Image, ImageTk, ImageDraw
 
 nii_file_path = ""
 data = None
@@ -13,7 +16,7 @@ img_width = None
 img_height = None
 threshold_entry = None
 intensity_tolerance_entry = None
-
+draw_color_button = None
 
 def plot_nii_slice(slice_num):
     global data, data_segmentated, canvas_image_id, img_width, img_height
@@ -273,6 +276,89 @@ def k_means_clicked(event):
     run_button = ttk.Button(k_frame, text="Run", command=run_k_means)
     run_button.pack(side="left")
 
+def anotar_clicked():
+    global draw_color_button  # Hacer referencia a la variable global
+
+    clear_head()
+
+    color_label = ttk.Label(head_frame, text="Seleccione un color para los trazos:")
+    color_label.pack(side="left", padx=10)
+
+    def select_color():
+        color = askcolor()[1]
+        if color:
+            draw_color_button.config(bg=color)
+
+    draw_color_button = tk.Button(head_frame, text="Seleccionar Color", command=select_color)
+    draw_color_button.pack(side="left", padx=10)
+
+    export_button = ttk.Button(head_frame, text="Exportar", command=export_image_with_annotations)
+    export_button.pack(side="left", padx=10)
+
+    # Configurar el evento de clic en el canvas para dibujar
+    canvas.bind("<B1-Motion>", draw_on_canvas)
+
+
+
+def draw_on_canvas(event):
+    global canvas_image_id
+
+    x = event.x
+    y = event.y
+
+    # Dibujar un círculo en el canvas en la posición del evento
+    oval_id = canvas.create_oval(x - 2, y - 2, x + 2, y + 2, fill=draw_color_button.cget("bg"), outline="")
+    # Asignar una etiqueta única al óvalo
+    canvas.itemconfig(oval_id, tags=("oval",))
+
+def export_image_with_annotations():
+    # Crear una imagen vacía para dibujar los trazos
+    annotated_img = Image.new("RGB", (img_width, img_height), color="white")
+    annotated_draw = ImageDraw.Draw(annotated_img)
+
+    # Obtener el tamaño del canvas
+    canvas_width = canvas.winfo_width()
+    canvas_height = canvas.winfo_height()
+
+    # Calcular el desplazamiento necesario para ajustar las coordenadas del canvas a las de la imagen exportada
+    x_offset = (img_width - canvas_width) // 2
+    y_offset = (img_height - canvas_height) // 2
+
+    # Obtener todos los óvalos dibujados en el canvas
+    for oval_id in canvas.find_withtag("oval"):
+        # Obtener las coordenadas del óvalo
+        x0, y0, x1, y1 = canvas.coords(oval_id)
+        # Aplicar el desplazamiento a las coordenadas
+        x0 += x_offset
+        y0 += y_offset
+        x1 += x_offset
+        y1 += y_offset
+        # Obtener el color del óvalo
+        color = canvas.itemcget(oval_id, "fill")
+        # Dibujar el óvalo en la imagen con el color correspondiente
+        annotated_draw.ellipse([x0, y0, x1, y1], fill=color)
+
+    # Guardar la imagen en formato PNG
+    filename = f"annotated_image_{str(uuid.uuid4())}.png"
+    annotated_img.save(filename)
+
+def export_segmentation():
+    global data_segmentated
+
+    if data_segmentated is not None:
+        filename = filedialog.asksaveasfilename(defaultextension=".nii", filetypes=[("NIfTI files", "*.nii")])
+        if filename:
+            img = nib.Nifti1Image(data_segmentated, np.eye(4))  # Crear objeto NIfTI
+            nib.save(img, filename)
+            messagebox.showinfo("Exportación Exitosa", f"Segmentación exportada como {filename}")
+        else:
+            messagebox.showwarning("Exportación Cancelada", "La exportación fue cancelada.")
+    else:
+        messagebox.showwarning("No hay Segmentación", "No se ha realizado ninguna segmentación.")
+
+
+
+
 def clear_head():
     for widget in head_frame.winfo_children():
         widget.destroy()
@@ -332,6 +418,12 @@ k_means_anchor = ttk.Label(navbar_frame, text="K-Means", cursor="hand2")
 k_means_anchor.pack(side="top", pady=10)
 k_means_anchor.bind("<Button-1>", k_means_clicked)
 
+anotar_anchor = ttk.Label(navbar_frame, text="Anotar", cursor="hand2")
+anotar_anchor.pack(side="top", pady=10)
+anotar_anchor.bind("<Button-1>", lambda event: anotar_clicked())
 
+# Agregar la anchor para exportar la segmentación
+export_segmentation_button = ttk.Button(navbar_frame, text="Exportar Segmentación", command=export_segmentation)
+export_segmentation_button.pack(side="top", pady=10)
 
 root.mainloop()
