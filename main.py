@@ -205,6 +205,73 @@ def region_growing(data, seed, intensity_tolerance):
 
     return segmented
 
+def initialize_centers(data, k):
+    # Inicializamos los centroides de forma aleatoria eligiendo k puntos aleatorios de los datos
+    centers_indices = np.random.choice(data.shape[0], size=k, replace=False)
+    centers = data[centers_indices]
+    return centers
+
+def assign_clusters(data, centers):
+    # Calculamos la distancia euclidiana entre cada punto de datos y los centroides
+
+    distances = np.abs(data - centers[:, np.newaxis])
+    # Asignamos cada punto al centroide más cercano
+    clusters = np.argmin(distances, axis=0)
+    return clusters
+
+def update_centers(data, clusters, k):
+    centers = []
+    for i in range(k):
+        # Verificamos si hay algún punto asignado al cluster
+        if np.sum(clusters == i) > 0:
+            # Calculamos el nuevo centroide como el promedio de los puntos asignados al cluster
+            centers.append(np.mean(data[clusters == i]))
+        else:
+            # Si el cluster está vacío, elegimos un nuevo centroide aleatorio
+            centers.append(np.random.choice(data))
+    return np.array(centers)
+
+def k_means(data, k, max_iterations=100, tol=1e-4):
+    centers = initialize_centers(data, k)
+    for _ in range(max_iterations):
+        old_centers = centers.copy()
+        clusters = assign_clusters(data, centers)
+        centers = update_centers(data, clusters, k)
+        # Comprobamos la convergencia
+        if np.linalg.norm(centers - old_centers) < tol:
+            break
+    return clusters, centers
+
+def run_k_means():
+    global data, data_segmentated
+    k_value = int(k_entry.get())
+
+    # Ejecutar el algoritmo K-Means
+    clusters, centers = k_means(data.flatten(), k_value)
+    print("centers: ",centers)
+    print("clusters: ",clusters)
+
+# Asignar a cada píxel el valor del centroide más cercano
+    segmented_data = centers[clusters]
+
+    # Redimensionar nuevamente los datos segmentados a la forma original de la imagen
+    data_segmentated = segmented_data.reshape(data.shape)
+    plot_nii_slice(int(slice_slider.get()))
+
+def k_means_clicked(event):
+    clear_head()  # Limpiar el header
+    k_frame = ttk.Frame(head_frame)
+    k_frame.pack(fill="x", padx=10, pady=5)
+
+    k_label = ttk.Label(k_frame, text="K:")
+    k_label.pack(side="left")
+
+    global k_entry
+    k_entry = ttk.Entry(k_frame)
+    k_entry.pack(side="left", padx=(0, 5))
+
+    run_button = ttk.Button(k_frame, text="Run", command=run_k_means)
+    run_button.pack(side="left")
 
 def clear_head():
     for widget in head_frame.winfo_children():
@@ -260,5 +327,11 @@ isodata_anchor.bind("<Button-1>", lambda event: isodata_clicked())
 region_growing_anchor = ttk.Label(navbar_frame, text="Region Growing", cursor="hand2")
 region_growing_anchor.pack(side="top", pady=10)
 region_growing_anchor.bind("<Button-1>", lambda event: clear_head() or region_growing_clicked())
+
+k_means_anchor = ttk.Label(navbar_frame, text="K-Means", cursor="hand2")
+k_means_anchor.pack(side="top", pady=10)
+k_means_anchor.bind("<Button-1>", k_means_clicked)
+
+
 
 root.mainloop()
